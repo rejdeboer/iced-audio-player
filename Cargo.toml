@@ -9,8 +9,6 @@ iced = { features = ["wgpu", "debug"], git = "https://github.com/rejdeboer/iced"
 env_logger = "0.10"
 log = "0.4"
 bytemuck = "1.14.1"
-glam = { features = ["bytemuck"], version = "0.25.0" }
-rand = "0.8.5"
 wgpu = "0.19.1"
 dasp = { version = "0.11.0", features = ["ring_buffer", "signal"] }
 cpal = "0.15.2"

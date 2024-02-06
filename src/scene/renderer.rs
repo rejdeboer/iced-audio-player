@@ -2,13 +2,13 @@ pub mod vertex;
 
 use vertex::{Vertex};
 
-use iced::{Rectangle, Size};
+use iced::{Rectangle};
 use wgpu::util::DeviceExt;
 
 pub struct Renderer {
     pipeline: wgpu::RenderPipeline,
-    vertices: wgpu::Buffer,
-    indices: wgpu::Buffer,
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
     num_indices: u32,
 }
 
@@ -21,7 +21,7 @@ impl Renderer {
         let indices = get_indices(resolution);
         let num_indices = indices.len() as u32;
 
-        let vertices = device.create_buffer_init(
+        let vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
                 contents: bytemuck::cast_slice(vec![Vertex::empty(); resolution*2].as_slice()),
@@ -29,7 +29,7 @@ impl Renderer {
             }
         );
 
-        let indices = device.create_buffer_init(
+        let index_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Index Buffer"),
                 contents: bytemuck::cast_slice(indices.as_slice()),
@@ -101,8 +101,8 @@ impl Renderer {
 
         Self {
             pipeline,
-            vertices,
-            indices,
+            vertex_buffer,
+            index_buffer,
             num_indices,
         }
     }
@@ -113,7 +113,7 @@ impl Renderer {
         vertices: &[Vertex],
     ) {
         queue.write_buffer(
-            &self.vertices,
+            &self.vertex_buffer,
             0,
             bytemuck::cast_slice(vertices),
         );
@@ -153,8 +153,8 @@ impl Renderer {
                 0f32,
             );
             pass.set_pipeline(&self.pipeline);
-            pass.set_vertex_buffer(0, self.vertices.slice(..));
-            pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
     }
