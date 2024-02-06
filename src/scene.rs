@@ -16,15 +16,13 @@ const RESOLUTION: usize = 80000;
 pub const MAX: u32 = 500;
 
 pub struct Scene {
-    pub size: f32,
     spectrometer: Spectrometer,
     spectrum: Vec<f32>,
 }
 
 impl Scene {
     pub fn new() -> Self {
-        let mut scene = Self {
-            size: 0.2,
+        let scene = Self {
             spectrometer: Spectrometer::new(RESOLUTION),
             spectrum: vec![0f32; RESOLUTION],
         };
@@ -45,10 +43,9 @@ impl<Message> shader::Program<Message> for Scene {
         &self,
         _state: &Self::State,
         _cursor: mouse::Cursor,
-        bounds: Rectangle,
+        _bounds: Rectangle,
     ) -> Self::Primitive {
         Primitive::new(
-            bounds,
             &self.spectrum,
         )
     }
@@ -61,7 +58,6 @@ pub struct Primitive {
 
 impl Primitive {
     pub fn new(
-        bounds: Rectangle,
         spectrum: &[f32],
     ) -> Self {
         let vertices = renderer::vertex::generate_vertices(spectrum);
@@ -78,12 +74,12 @@ impl shader::Primitive for Primitive {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         _bounds: Rectangle,
-        target_size: Size<u32>,
+        _target_size: Size<u32>,
         _scale_factor: f32,
         storage: &mut shader::Storage,
     ) {
         if !storage.has::<Renderer>() {
-            storage.store(Renderer::new(device, queue, format, target_size, RESOLUTION));
+            storage.store(Renderer::new(device, format, RESOLUTION));
         }
 
         let pipeline = storage.get_mut::<Renderer>().unwrap();

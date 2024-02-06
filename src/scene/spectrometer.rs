@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::{Duration};
 use crate::player::{BUFFER_SIZE, FftSpectrum};
 
 const SMOOTHING_SPEED: f32 = 7.;

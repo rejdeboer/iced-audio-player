@@ -15,9 +15,7 @@ pub struct Renderer {
 impl Renderer {
     pub fn new(
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
-        target_size: Size<u32>,
         resolution: usize,
     ) -> Self {
         let indices = get_indices(resolution);
