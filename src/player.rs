@@ -18,20 +18,20 @@ pub struct FftSpectrum {
     pub bin_size: f32,
 }
 
-pub struct Track {
-    pub buffer: Arc<Vec<i16>>,
+pub struct Player {
     pub sample_rate: cpal::SampleRate,
     pub channels: ChannelCount,
     pub stream: Option<Stream>,
     pub position: Arc<Mutex<usize>>,
+    buffer: Arc<Vec<i16>>,
     fft: Arc<dyn Fft<f32>>,
     rb: Arc<Mutex<Fixed<[i32; BUFFER_SIZE]>>>,
     hamming_window: Vec<f32>,
     output_len: usize,
 }
 
-impl Track {
-    pub fn new() -> Self {
+impl Player {
+    pub fn default() -> Self {
         let rb = Arc::new(Mutex::new(Fixed::from([0; BUFFER_SIZE])));
         let mut fft_planner = FftPlanner::new();
         let hamming_window: Vec<f32> = hamming_iter(BUFFER_SIZE)
@@ -39,11 +39,11 @@ impl Track {
             .collect::<Vec<f32>>();
 
         Self {
-            buffer: Arc::new(Vec::new()),
             sample_rate: cpal::SampleRate(44100),
             channels: 2,
             stream: None,
             position: Arc::new(Mutex::new(0)),
+            buffer: Arc::new(Vec::new()),
             fft: fft_planner.plan_fft_forward(BUFFER_SIZE),
             rb,
             hamming_window,
@@ -146,7 +146,7 @@ impl Track {
         (self.sample_rate.0 as f64 * seconds) as i32 * self.channels as i32
     }
 
-    pub fn buffer_data_fft(&self) -> FftSpectrum {
+    pub fn get_fft_spectrum(&self) -> FftSpectrum {
         let rb = *self.rb.lock().unwrap();
 
         let (left, right) = rb.slices();

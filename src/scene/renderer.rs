@@ -1,45 +1,32 @@
-mod spectrum;
+pub mod vertex;
 
-use spectrum::Vertex;
+use vertex::{Vertex};
 
 use iced::{Rectangle, Size};
 use wgpu::util::DeviceExt;
-use crate::audio::Track;
-use crate::scene::renderer::spectrum::Spectrum;
 
-pub struct Pipeline {
+pub struct Renderer {
     pipeline: wgpu::RenderPipeline,
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     num_indices: u32,
-    track: Track,
-    playing: bool,
-    spectrum: Spectrum,
 }
 
-impl Pipeline {
+impl Renderer {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
         target_size: Size<u32>,
+        resolution: usize,
     ) -> Self {
-        let mut track = Track::new();
-        track.load_file("media/song.wav".into());
-        let fft_spectrum = track.buffer_data_fft();
-
-        track.play();
-        let playing = true;
-
-        let mut spectrum = Spectrum::new();
-
-        let (vertices, indices) = spectrum.generate_vertices(fft_spectrum);
+        let indices = get_indices(resolution);
         let num_indices = indices.len() as u32;
 
         let vertices = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(vertices.as_slice()),
+                contents: bytemuck::cast_slice(vec![Vertex::empty(); resolution*2].as_slice()),
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             }
         );
@@ -119,32 +106,19 @@ impl Pipeline {
             vertices,
             indices,
             num_indices,
-            track,
-            playing,
-            spectrum,
         }
     }
 
     pub fn update(
         &mut self,
         queue: &wgpu::Queue,
+        vertices: &[Vertex],
     ) {
-        if self.playing {
-            let fft_spectrum = self.track.buffer_data_fft();
-
-            let (vertices, indices) = self.spectrum.generate_vertices(fft_spectrum);
-
-            queue.write_buffer(
-                &self.vertices,
-                0,
-                bytemuck::cast_slice(vertices.as_slice()),
-            );
-            queue.write_buffer(
-                &self.indices,
-                0,
-                bytemuck::cast_slice(indices.as_slice()),
-            );
-        }
+        queue.write_buffer(
+            &self.vertices,
+            0,
+            bytemuck::cast_slice(vertices),
+        );
     }
 
     pub fn render(
@@ -172,17 +146,30 @@ impl Pipeline {
                     occlusion_query_set: None,
                 });
 
-            pass.set_scissor_rect(
-                viewport.x,
-                viewport.y,
-                viewport.width,
-                viewport.height,
-            );
+            // pass.set_scissor_rect(
+            //     viewport.x,
+            //     viewport.y,
+            //     viewport.width,
+            //     viewport.height,
+            // );
             pass.set_pipeline(&self.pipeline);
             pass.set_vertex_buffer(0, self.vertices.slice(..));
             pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
     }
+}
+
+fn get_indices(size: usize) -> Vec<u32> {
+    let mut indices: Vec<u32> = Vec::new();
+
+    for i in 0..size {
+        let k = i as u32 * 2;
+        indices.push(k + 0);
+        indices.push(k + 2);
+        indices.push(k + 1);
+    }
+
+    indices
 }
 

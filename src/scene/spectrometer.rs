@@ -1,29 +1,7 @@
 use std::time::Instant;
-use crate::audio::{BUFFER_SIZE, FftSpectrum};
+use crate::player::{BUFFER_SIZE, FftSpectrum};
 
-const RESOLUTION: usize = 80000;
 const SMOOTHING_SPEED: f32 = 7.;
-
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-#[repr(C)]
-pub struct Vertex {
-    position: [f32; 2],
-}
-
-impl Vertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 2] =
-        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
-
-    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        use std::mem;
-
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &Self::ATTRIBS,
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 struct FrequencyVertex {
@@ -32,9 +10,10 @@ struct FrequencyVertex {
     position: f32,
 }
 
-pub struct Spectrum {
+pub struct Spectrometer {
     smoothing_buffer: [f32; BUFFER_SIZE],
     updated: Instant,
+    resolution: usize,
 }
 
 impl FrequencyVertex {
@@ -47,34 +26,22 @@ impl FrequencyVertex {
     }
 }
 
-impl Spectrum {
-    pub fn new() -> Self {
-        Spectrum {
+impl Spectrometer {
+    pub fn new(resolution: usize) -> Self {
+        Spectrometer {
             smoothing_buffer: [0f32; BUFFER_SIZE],
             updated: Instant::now(),
+            resolution,
         }
     }
 
-    pub fn generate_vertices(&mut self, fft_spectrum: FftSpectrum) -> (Vec<Vertex>, Vec<u32>) {
-        let mut vertices: Vec<Vertex> = Vec::new();
-        let mut indices: Vec<u32> = Vec::new();
+    pub fn generate_spectrum(&mut self, fft_spectrum: FftSpectrum) -> Vec<f32> {
         let frequency_vertices = self.generate_frequency_vertices(fft_spectrum);
+        let spectrum = frequency_vertices.iter()
+            .map(|vertex| vertex.volume)
+            .collect();
 
-        for (i, vertex) in frequency_vertices.iter().enumerate() {
-            let frac = i as f32 / frequency_vertices.len() as f32;
-            let x = (2.0 * frac) - 1f32;
-            let y = (2.0 * vertex.volume) - 1f32;
-
-            vertices.push(Vertex { position: [x, -1.] });
-            vertices.push(Vertex { position: [x, y] });
-
-            let i = vertices.len() as u32 - 2;
-            indices.push(i + 0);
-            indices.push(i + 2);
-            indices.push(i + 1);
-        }
-
-        (vertices, indices)
+        spectrum
     }
 
     fn generate_frequency_vertices(&mut self, fft_spectrum: FftSpectrum) -> Vec<FrequencyVertex> {
@@ -130,7 +97,7 @@ impl Spectrum {
 
     // Source: https://codeberg.org/BrunoWallner/audioviz/src/branch/main/src/spectrum/processor.rs
     fn get_interpolated_vertices(&self, vertices: Vec<FrequencyVertex>) -> Vec<FrequencyVertex> {
-        let mut interpolated: Vec<FrequencyVertex> = vec![FrequencyVertex::empty(); RESOLUTION];
+        let mut interpolated: Vec<FrequencyVertex> = vec![FrequencyVertex::empty(); self.resolution];
 
         let mut fb = vertices.clone();
 
@@ -147,7 +114,7 @@ impl Spectrum {
                 let start = (fb[i + 1].position * interpolated.len() as f32) as usize;
                 let end = (fb[i + 2].position * interpolated.len() as f32) as usize;
 
-                if start < RESOLUTION && end < RESOLUTION {
+                if start < self.resolution && end < self.resolution {
                     for j in start..=end {
                         let pos: usize = j - start;
                         let gap_size = end - start;

@@ -1,21 +1,25 @@
-pub mod renderer;
+mod renderer;
+mod spectrometer;
 
-use renderer::Pipeline;
+use renderer::Renderer;
 
 use iced::mouse;
 use iced::time::Duration;
 use iced::widget::shader;
 use iced::{Color, Rectangle, Size};
 
-use glam::Vec3;
-use rand::Rng;
+use crate::player::FftSpectrum;
+use spectrometer::Spectrometer;
+
+const RESOLUTION: usize = 80000;
 
 pub const MAX: u32 = 500;
 
-#[derive(Clone)]
 pub struct Scene {
     pub size: f32,
     pub light_color: Color,
+    spectrometer: Spectrometer,
+    spectrum: Vec<f32>,
 }
 
 impl Scene {
@@ -23,12 +27,15 @@ impl Scene {
         let mut scene = Self {
             size: 0.2,
             light_color: Color::WHITE,
+            spectrometer: Spectrometer::new(RESOLUTION),
+            spectrum: vec![0f32; RESOLUTION],
         };
 
         scene
     }
 
-    pub fn update(&mut self, time: Duration) {
+    pub fn update(&mut self, fft_spectrum: FftSpectrum, dt: Duration) {
+        self.spectrum = self.spectrometer.generate_spectrum(fft_spectrum);
     }
 }
 
@@ -44,19 +51,24 @@ impl<Message> shader::Program<Message> for Scene {
     ) -> Self::Primitive {
         Primitive::new(
             bounds,
+            &self.spectrum,
         )
     }
 }
 
 #[derive(Debug)]
 pub struct Primitive {
+    vertices: Vec<renderer::vertex::Vertex>,
 }
 
 impl Primitive {
     pub fn new(
         bounds: Rectangle,
+        spectrum: &[f32],
     ) -> Self {
+        let vertices = renderer::vertex::generate_vertices(spectrum);
         Self {
+            vertices,
         }
     }
 }
@@ -72,15 +84,16 @@ impl shader::Primitive for Primitive {
         _scale_factor: f32,
         storage: &mut shader::Storage,
     ) {
-        if !storage.has::<Pipeline>() {
-            storage.store(Pipeline::new(device, queue, format, target_size));
+        if !storage.has::<Renderer>() {
+            storage.store(Renderer::new(device, queue, format, target_size, RESOLUTION));
         }
 
-        let pipeline = storage.get_mut::<Pipeline>().unwrap();
+        let pipeline = storage.get_mut::<Renderer>().unwrap();
 
         // upload data to GPU
         pipeline.update(
             queue,
+            &self.vertices,
         );
     }
 
@@ -93,7 +106,7 @@ impl shader::Primitive for Primitive {
         encoder: &mut wgpu::CommandEncoder,
     ) {
         // at this point our pipeline should always be initialized
-        let pipeline = storage.get::<Pipeline>().unwrap();
+        let pipeline = storage.get::<Renderer>().unwrap();
 
         // render primitive
         pipeline.render(
@@ -102,12 +115,4 @@ impl shader::Primitive for Primitive {
             viewport,
         );
     }
-}
-
-fn rnd_origin() -> Vec3 {
-    Vec3::new(
-        rand::thread_rng().gen_range(-4.0..4.0),
-        rand::thread_rng().gen_range(-4.0..4.0),
-        rand::thread_rng().gen_range(-4.0..2.0),
-    )
 }
