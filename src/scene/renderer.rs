@@ -146,12 +146,14 @@ impl Renderer {
                     occlusion_query_set: None,
                 });
 
-            // pass.set_scissor_rect(
-            //     viewport.x,
-            //     viewport.y,
-            //     viewport.width,
-            //     viewport.height,
-            // );
+            pass.set_viewport(
+                viewport.x as f32,
+                viewport.y as f32,
+                viewport.width as f32,
+                viewport.height as f32,
+                0f32,
+                0f32,
+            );
             pass.set_pipeline(&self.pipeline);
             pass.set_vertex_buffer(0, self.vertices.slice(..));
             pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);

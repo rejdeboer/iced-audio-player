@@ -6,7 +6,7 @@ use renderer::Renderer;
 use iced::mouse;
 use iced::time::Duration;
 use iced::widget::shader;
-use iced::{Color, Rectangle, Size};
+use iced::{Rectangle, Size};
 
 use crate::player::FftSpectrum;
 use spectrometer::Spectrometer;
@@ -17,7 +17,6 @@ pub const MAX: u32 = 500;
 
 pub struct Scene {
     pub size: f32,
-    pub light_color: Color,
     spectrometer: Spectrometer,
     spectrum: Vec<f32>,
 }
@@ -26,7 +25,6 @@ impl Scene {
     pub fn new() -> Self {
         let mut scene = Self {
             size: 0.2,
-            light_color: Color::WHITE,
             spectrometer: Spectrometer::new(RESOLUTION),
             spectrum: vec![0f32; RESOLUTION],
         };
