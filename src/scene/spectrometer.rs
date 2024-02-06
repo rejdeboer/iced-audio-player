@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use crate::player::{BUFFER_SIZE, FftSpectrum};
 
 const SMOOTHING_SPEED: f32 = 7.;
@@ -12,7 +12,6 @@ struct FrequencyVertex {
 
 pub struct Spectrometer {
     smoothing_buffer: [f32; BUFFER_SIZE],
-    updated: Instant,
     resolution: usize,
 }
 
@@ -30,21 +29,11 @@ impl Spectrometer {
     pub fn new(resolution: usize) -> Self {
         Spectrometer {
             smoothing_buffer: [0f32; BUFFER_SIZE],
-            updated: Instant::now(),
             resolution,
         }
     }
 
-    pub fn generate_spectrum(&mut self, fft_spectrum: FftSpectrum) -> Vec<f32> {
-        let frequency_vertices = self.generate_frequency_vertices(fft_spectrum);
-        let spectrum = frequency_vertices.iter()
-            .map(|vertex| vertex.volume)
-            .collect();
-
-        spectrum
-    }
-
-    fn generate_frequency_vertices(&mut self, fft_spectrum: FftSpectrum) -> Vec<FrequencyVertex> {
+    pub fn generate_spectrum(&mut self, fft_spectrum: FftSpectrum, dt: Duration) -> Vec<f32> {
         let mut vertices = fft_spectrum.values.iter()
             .enumerate()
             .map(|(i, magnitude)| FrequencyVertex {
@@ -56,10 +45,14 @@ impl Spectrometer {
 
         self.apply_logarithmic_scaling(&mut vertices);
         self.apply_normalised_positioning(&mut vertices);
-        self.apply_smoothing(&mut vertices);
+        self.apply_smoothing(&mut vertices, dt);
         vertices = self.get_interpolated_vertices(vertices);
 
-        vertices
+        let spectrum = vertices.iter()
+            .map(|vertex| vertex.volume)
+            .collect();
+
+        spectrum
     }
 
     fn apply_logarithmic_scaling(&self, vertices: &mut Vec<FrequencyVertex>) {
@@ -81,18 +74,13 @@ impl Spectrometer {
         }
     }
 
-    fn apply_smoothing(&mut self, vertices: &mut Vec<FrequencyVertex>) {
-        let now = Instant::now();
-        let dt = now.duration_since(self.updated).as_secs_f32();
-
+    fn apply_smoothing(&mut self, vertices: &mut Vec<FrequencyVertex>, dt: Duration) {
         for (i, vertex) in vertices.iter_mut().enumerate() {
             if !vertex.volume.is_nan() {
-                self.smoothing_buffer[i] += (vertex.volume - self.smoothing_buffer[i]) * dt * SMOOTHING_SPEED;
+                self.smoothing_buffer[i] += (vertex.volume - self.smoothing_buffer[i]) * dt.as_secs_f32() * SMOOTHING_SPEED;
             }
             vertex.volume = self.smoothing_buffer[i];
         };
-
-        self.updated = now;
     }
 
     // Source: https://codeberg.org/BrunoWallner/audioviz/src/branch/main/src/spectrum/processor.rs

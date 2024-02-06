@@ -33,7 +33,7 @@ impl Scene {
     }
 
     pub fn update(&mut self, fft_spectrum: FftSpectrum, dt: Duration) {
-        self.spectrum = self.spectrometer.generate_spectrum(fft_spectrum);
+        self.spectrum = self.spectrometer.generate_spectrum(fft_spectrum, dt);
     }
 }
 
