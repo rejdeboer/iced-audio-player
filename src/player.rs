@@ -23,7 +23,8 @@ pub struct Player {
     pub sample_rate: cpal::SampleRate,
     pub channels: ChannelCount,
     pub stream: Option<Stream>,
-    pub position: Arc<AtomicUsize>,
+    pub is_playing: bool,
+    position: Arc<AtomicUsize>,
     buffer: Arc<Vec<i16>>,
     fft: Arc<dyn Fft<f32>>,
     rb: Arc<Mutex<Fixed<[i32; BUFFER_SIZE]>>>,
@@ -43,6 +44,7 @@ impl Player {
             sample_rate: cpal::SampleRate(44100),
             channels: 2,
             stream: None,
+            is_playing: false,
             position: Arc::new(AtomicUsize::new(0)),
             buffer: Arc::new(Vec::new()),
             fft: fft_planner.plan_fft_forward(BUFFER_SIZE),
@@ -110,36 +112,51 @@ impl Player {
 
                         pos += 1;
                     }
-                    position.store(pos, Ordering::Relaxed);
+                    let _ = position.compare_exchange(pos - data.len(), pos, Ordering::Relaxed, Ordering::Relaxed);
                 },
                 move |_err| panic!("ERROR"),
                 None
             )
             .expect("Building output stream failed"),
         );
+        self.is_playing = true;
     }
 
     pub fn play(&mut self) {
         if let Some(ref stream) = self.stream {
             info!("Playing stream");
             stream.play().unwrap();
+            self.is_playing = true;
             return;
         }
     }
 
-    pub fn set_position(&mut self, seconds: f64) {
+    pub fn set_position(&mut self, seconds: f32) {
         let new_position: usize = self.seconds_to_samples(seconds).max(0) as usize;
         self.position.store(new_position, Ordering::Relaxed);
     }
 
+    pub fn get_position(&self) -> f32 {
+        self.samples_to_seconds(self.position.load(Ordering::Relaxed))
+    }
+
+    pub fn get_duration(&self) -> f32 {
+        self.samples_to_seconds(self.buffer.len())
+    }
+
     pub fn pause(&mut self) {
         if let Some(ref stream) = self.stream {
-            stream.pause().unwrap()
+            stream.pause().unwrap();
+            self.is_playing = false;
         }
     }
 
-    fn seconds_to_samples(&self, seconds: f64) -> i32 {
-        (self.sample_rate.0 as f64 * seconds) as i32 * self.channels as i32
+    fn seconds_to_samples(&self, seconds: f32) -> i32 {
+        (self.sample_rate.0 as f32 * seconds) as i32 * self.channels as i32
+    }
+
+    fn samples_to_seconds(&self, samples: usize) -> f32 {
+        samples as f32 / self.channels as f32 / self.sample_rate.0 as f32
     }
 
     pub fn get_fft_spectrum(&self) -> FftSpectrum {
