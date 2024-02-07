@@ -4,6 +4,7 @@ use hound::{WavReader};
 use dasp::ring_buffer::{Fixed};
 use std::path::{PathBuf};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use apodize::hamming_iter;
 use log::info;
 use rustfft::{Fft, FftPlanner};
@@ -22,7 +23,7 @@ pub struct Player {
     pub sample_rate: cpal::SampleRate,
     pub channels: ChannelCount,
     pub stream: Option<Stream>,
-    pub position: Arc<Mutex<usize>>,
+    pub position: Arc<AtomicUsize>,
     buffer: Arc<Vec<i16>>,
     fft: Arc<dyn Fft<f32>>,
     rb: Arc<Mutex<Fixed<[i32; BUFFER_SIZE]>>>,
@@ -42,7 +43,7 @@ impl Player {
             sample_rate: cpal::SampleRate(44100),
             channels: 2,
             stream: None,
-            position: Arc::new(Mutex::new(0)),
+            position: Arc::new(AtomicUsize::new(0)),
             buffer: Arc::new(Vec::new()),
             fft: fft_planner.plan_fft_forward(BUFFER_SIZE),
             rb,
@@ -97,18 +98,19 @@ impl Player {
             device.build_output_stream(
                 &supported_config.into(),
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    let mut pos = position.lock().unwrap();
+                    let mut pos = position.load(Ordering::Relaxed);
                     let mut r_b = rb.lock().unwrap();
                     for sample in data.iter_mut() {
-                        let value = if *pos < buffer.len() { buffer[*pos] } else { 0 };
+                        let value = if pos < buffer.len() { buffer[pos] } else { 0 };
                         *sample = cpal::Sample::from_sample(value);
 
                         let mut n = r_b.clone();
                         n.push(value as i32);
                         *r_b = n;
 
-                        *pos += 1;
+                        pos += 1;
                     }
+                    position.store(pos, Ordering::Relaxed);
                 },
                 move |_err| panic!("ERROR"),
                 None
@@ -126,20 +128,14 @@ impl Player {
     }
 
     pub fn set_position(&mut self, seconds: f64) {
-        let mut position = self.position.lock().unwrap();
-        *position = self.seconds_to_samples(seconds).max(0) as usize;
+        let new_position: usize = self.seconds_to_samples(seconds).max(0) as usize;
+        self.position.store(new_position, Ordering::Relaxed);
     }
 
     pub fn pause(&mut self) {
         if let Some(ref stream) = self.stream {
             stream.pause().unwrap()
         }
-    }
-
-    pub fn forward(&mut self, seconds: f64) {
-        let number_of_samples = self.seconds_to_samples(seconds);
-        let mut position = self.position.lock().unwrap();
-        *position = (*position as i32 + number_of_samples).max(0) as usize;
     }
 
     fn seconds_to_samples(&self, seconds: f64) -> i32 {
