@@ -20,6 +20,7 @@ struct AudioPlayer {
     scene: Scene,
     player: Player,
     seek_bar_value: f32,
+    seek_bar_dragging: bool,
     duration: f32,
 }
 
@@ -53,6 +54,7 @@ impl Application for AudioPlayer {
                 scene: Scene::new(),
                 player: Player::default(),
                 seek_bar_value: 0f32,
+                seek_bar_dragging: false,
                 duration: 0f32,
             },
             Command::none(),
@@ -66,7 +68,9 @@ impl Application for AudioPlayer {
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match message {
             Message::Tick(time) => {
-                self.seek_bar_value = self.player.get_position();
+                if !self.seek_bar_dragging {
+                    self.seek_bar_value = self.player.get_position();
+                }
                 self.update_scene(time);
                 self.time = time;
             }
@@ -81,10 +85,12 @@ impl Application for AudioPlayer {
                 self.duration = self.player.get_duration();
             }
             Message::SetPositionPreview(position) => {
+                self.seek_bar_dragging = true;
                 self.seek_bar_value = position;
             }
             Message::SetPosition => {
                 self.player.set_position(self.seek_bar_value);
+                self.seek_bar_dragging = false;
             }
         }
 
