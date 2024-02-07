@@ -20,6 +20,7 @@ struct AudioPlayer {
     scene: Scene,
     player: Player,
     seek_bar_value: f32,
+    duration: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +53,7 @@ impl Application for AudioPlayer {
                 scene: Scene::new(),
                 player: Player::default(),
                 seek_bar_value: 0f32,
+                duration: 0f32,
             },
             Command::none(),
         )
@@ -76,6 +78,7 @@ impl Application for AudioPlayer {
             }
             Message::LoadFile(path) => {
                 self.player.load_file(path);
+                self.duration = self.player.get_duration();
             }
             Message::SetPositionPreview(position) => {
                 self.seek_bar_value = position;
@@ -100,7 +103,7 @@ impl Application for AudioPlayer {
             button("Play").on_press(Message::Play)
         };
 
-        let seek_bar = slider(0f32..=100f32, self.seek_bar_value, Message::SetPositionPreview)
+        let seek_bar = slider(0f32..=self.duration, self.seek_bar_value, Message::SetPositionPreview)
             .on_release(Message::SetPosition);
 
         let top_controls = row![
