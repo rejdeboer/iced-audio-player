@@ -3,7 +3,7 @@ use iced_audio_player::scene::{Scene};
 
 use iced::executor;
 use iced::time::Instant;
-use iced::widget::{column, container, row, shader, button, slider};
+use iced::widget::{column, container, row, shader, button, slider, text};
 use iced::window;
 use iced::{
     Alignment, Application, Command, Element, Length, Subscription,
@@ -16,7 +16,7 @@ fn main() -> iced::Result {
 }
 
 struct AudioPlayer {
-    time: Instant,
+    last_updated: Instant,
     scene: Scene,
     player: Player,
     seek_bar_value: f32,
@@ -37,7 +37,7 @@ enum Message {
 impl AudioPlayer {
     fn update_scene(&mut self, time: Instant) {
         let fft_spectrum = self.player.get_fft_spectrum();
-        self.scene.update(fft_spectrum, time - self.time);
+        self.scene.update(fft_spectrum, time - self.last_updated);
     }
 }
 
@@ -50,7 +50,7 @@ impl Application for AudioPlayer {
     fn new(_flags: Self::Flags) -> (Self, Command<Self::Message>) {
         (
             Self {
-                time: Instant::now(),
+                last_updated: Instant::now(),
                 scene: Scene::new(),
                 player: Player::default(),
                 seek_bar_value: 0f32,
@@ -72,7 +72,7 @@ impl Application for AudioPlayer {
                     self.seek_bar_value = self.player.get_position();
                 }
                 self.update_scene(time);
-                self.time = time;
+                self.last_updated = time;
             }
             Message::Play => {
                 self.player.play();
@@ -111,13 +111,16 @@ impl Application for AudioPlayer {
 
         let seek_bar = slider(0f32..=self.duration, self.seek_bar_value, Message::SetPositionPreview)
             .on_release(Message::SetPosition);
+        let time_played_label = text(seconds_to_minutes(self.seek_bar_value)).width(35);
+        let duration_label = text(seconds_to_minutes(self.duration)).width(35);
 
         let top_controls = row![
             load_file_btn,
             play_btn,
         ];
 
-        let bottom_controls = row![seek_bar];
+        let bottom_controls = row![time_played_label, seek_bar, duration_label]
+            .spacing(10);
 
         let controls = column![
             top_controls,
@@ -135,4 +138,10 @@ impl Application for AudioPlayer {
     fn subscription(&self) -> Subscription<Self::Message> {
         window::frames().map(Message::Tick)
     }
+}
+
+fn seconds_to_minutes(seconds: f32) -> String {
+    let minutes = seconds as u32 / 60;
+    let seconds_left = seconds as u32 % 60;
+    format!("{}:{:0>2}", minutes, seconds_left)
 }

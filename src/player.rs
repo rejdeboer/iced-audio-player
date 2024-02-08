@@ -68,6 +68,7 @@ impl Player {
         self.sample_rate = cpal::SampleRate(spec.sample_rate);
         self.channels = spec.channels;
         self.buffer = Arc::new(samples);
+        self.position.store(0, Ordering::Relaxed);
 
         let bin_size: f32 = self.sample_rate.0 as f32 / BUFFER_SIZE as f32 * 2.;
         self.output_len = (MAX_FREQUENCY / bin_size).ceil() as usize;
@@ -115,9 +116,9 @@ impl Player {
                     let _ = position.compare_exchange(pos - data.len(), pos, Ordering::Relaxed, Ordering::Relaxed);
                 },
                 move |_err| panic!("ERROR"),
-                None
+                None,
             )
-            .expect("Building output stream failed"),
+                .expect("Building output stream failed"),
         );
         self.is_playing = true;
     }
