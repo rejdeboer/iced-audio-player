@@ -52,7 +52,7 @@ impl Application for AudioPlayer {
             Self {
                 last_updated: Instant::now(),
                 scene: Scene::new(),
-                player: Player::default(),
+                player: Player::new(),
                 seek_bar_value: 0f32,
                 seek_bar_dragging: false,
                 duration: 0f32,
@@ -103,7 +103,7 @@ impl Application for AudioPlayer {
             shader(&self.scene).width(Length::Fill).height(Length::Fill);
 
         let load_file_btn = button("Load file").on_press(Message::LoadFile("./media/song.wav".into()));
-        let play_btn = if self.player.is_playing {
+        let play_btn = if self.player.is_playing() {
             button("Pause").on_press(Message::Pause)
         } else {
             button("Play").on_press(Message::Play)

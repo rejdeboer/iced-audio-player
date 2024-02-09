@@ -20,10 +20,10 @@ pub struct FftSpectrum {
 }
 
 pub struct Player {
-    pub sample_rate: cpal::SampleRate,
-    pub channels: ChannelCount,
-    pub stream: Option<Stream>,
-    pub is_playing: bool,
+    sample_rate: cpal::SampleRate,
+    channels: ChannelCount,
+    stream: Option<Stream>,
+    is_playing: bool,
     position: Arc<AtomicUsize>,
     buffer: Arc<Vec<i16>>,
     fft: Arc<dyn Fft<f32>>,
@@ -33,7 +33,7 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn default() -> Self {
+    pub fn new() -> Self {
         let rb = Arc::new(Mutex::new(Fixed::from([0; BUFFER_SIZE])));
         let mut fft_planner = FftPlanner::new();
         let hamming_window: Vec<f32> = hamming_iter(BUFFER_SIZE)
@@ -145,19 +145,15 @@ impl Player {
         self.samples_to_seconds(self.buffer.len())
     }
 
+    pub fn is_playing(&self) -> bool {
+        self.is_playing
+    }
+
     pub fn pause(&mut self) {
         if let Some(ref stream) = self.stream {
             stream.pause().unwrap();
             self.is_playing = false;
         }
-    }
-
-    fn seconds_to_samples(&self, seconds: f32) -> i32 {
-        (self.sample_rate.0 as f32 * seconds) as i32 * self.channels as i32
-    }
-
-    fn samples_to_seconds(&self, samples: usize) -> f32 {
-        samples as f32 / self.channels as f32 / self.sample_rate.0 as f32
     }
 
     pub fn get_fft_spectrum(&self) -> FftSpectrum {
@@ -185,5 +181,13 @@ impl Player {
             values,
             bin_size,
         }
+    }
+
+    fn seconds_to_samples(&self, seconds: f32) -> i32 {
+        (self.sample_rate.0 as f32 * seconds) as i32 * self.channels as i32
+    }
+
+    fn samples_to_seconds(&self, samples: usize) -> f32 {
+        samples as f32 / self.channels as f32 / self.sample_rate.0 as f32
     }
 }
