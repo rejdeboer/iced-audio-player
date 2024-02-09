@@ -10,7 +10,7 @@ use log::info;
 use rustfft::{Fft, FftPlanner};
 use rustfft::num_complex::Complex;
 
-pub const BUFFER_SIZE: usize = 2048;
+pub const BUFFER_SIZE: usize = 4096;
 
 const MAX_FREQUENCY: f32 = 20000.;
 
@@ -118,11 +118,17 @@ impl Player {
                         let value = if pos < buffer.len() { buffer[pos] } else { 0 };
                         *sample = cpal::Sample::from_sample(value);
 
-                        producer.push(value as f32).unwrap();
+                        // If the buffer is full, we should do one of the following:
+                        // - Increase BUFFER_SIZE
+                        // - Optimize UI thread
+                        // - Decrease spectrum resolution
+                        if let Some(_) = producer.push(value as f32).err() {
+                            eprintln!("Ring buffer is full");
+                        }
 
                         pos += 1;
                     }
-                    let _ = position.compare_exchange(pos - data.len(), pos, Ordering::Relaxed, Ordering::Relaxed);
+                    _ = position.compare_exchange(pos - data.len(), pos, Ordering::Relaxed, Ordering::Relaxed);
                 },
                 move |_err| panic!("ERROR"),
                 None,

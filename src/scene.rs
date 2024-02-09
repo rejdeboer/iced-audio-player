@@ -11,7 +11,7 @@ use iced::{Rectangle, Size};
 use crate::player::FftSpectrum;
 use spectrometer::Spectrometer;
 
-const RESOLUTION: usize = 50_000;
+const RESOLUTION: usize = 300_000;
 
 pub struct Scene {
     spectrometer: Spectrometer,
