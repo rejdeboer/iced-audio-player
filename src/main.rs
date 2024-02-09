@@ -34,13 +34,6 @@ enum Message {
     SetPosition,
 }
 
-impl AudioPlayer {
-    fn update_scene(&mut self, time: Instant) {
-        let fft_spectrum = self.player.get_fft_spectrum();
-        self.scene.update(fft_spectrum, time - self.last_updated);
-    }
-}
-
 impl Application for AudioPlayer {
     type Executor = executor::Default;
     type Message = Message;
@@ -71,7 +64,7 @@ impl Application for AudioPlayer {
                 if !self.seek_bar_dragging {
                     self.seek_bar_value = self.player.get_position();
                 }
-                self.update_scene(time);
+                self.scene.update(&self.player.get_fft_spectrum(), time - self.last_updated);
                 self.last_updated = time;
             }
             Message::Play => {

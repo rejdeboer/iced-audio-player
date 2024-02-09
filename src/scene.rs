@@ -11,7 +11,7 @@ use iced::{Rectangle, Size};
 use crate::player::FftSpectrum;
 use spectrometer::Spectrometer;
 
-const RESOLUTION: usize = 10_000;
+const RESOLUTION: usize = 50_000;
 
 pub struct Scene {
     spectrometer: Spectrometer,
@@ -28,7 +28,7 @@ impl Scene {
         scene
     }
 
-    pub fn update(&mut self, fft_spectrum: FftSpectrum, dt: Duration) {
+    pub fn update(&mut self, fft_spectrum: &FftSpectrum, dt: Duration) {
         self.spectrum = self.spectrometer.generate_spectrum(fft_spectrum, dt);
     }
 }

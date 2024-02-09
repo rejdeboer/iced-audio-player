@@ -33,7 +33,7 @@ impl Spectrometer {
         }
     }
 
-    pub fn generate_spectrum(&mut self, fft_spectrum: FftSpectrum, dt: Duration) -> Vec<f32> {
+    pub fn generate_spectrum(&mut self, fft_spectrum: &FftSpectrum, dt: Duration) -> Vec<f32> {
         let mut vertices = fft_spectrum.values.iter()
             .enumerate()
             .map(|(i, magnitude)| FrequencyVertex {
@@ -63,7 +63,7 @@ impl Spectrometer {
     }
 
     fn apply_normalised_positioning(&self, vertices: &mut Vec<FrequencyVertex>) {
-        let max_vol = 5000.;
+        let max_vol = 3000.;
         let max_pos = match vertices.last() {
             Some(vertex) => vertex.position,
             None => 1f32,

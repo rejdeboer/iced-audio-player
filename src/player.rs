@@ -1,22 +1,31 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{ChannelCount, Stream};
 use hound::{WavReader};
-use dasp::ring_buffer::{Fixed};
+use rtrb::{Consumer, RingBuffer};
 use std::path::{PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use apodize::hamming_iter;
 use log::info;
 use rustfft::{Fft, FftPlanner};
 use rustfft::num_complex::Complex;
 
-pub const BUFFER_SIZE: usize = 8192;
+pub const BUFFER_SIZE: usize = 2048;
 
 const MAX_FREQUENCY: f32 = 20000.;
 
 pub struct FftSpectrum {
     pub values: Vec<f32>,
     pub bin_size: f32,
+}
+
+impl FftSpectrum {
+    pub fn empty() -> Self {
+        FftSpectrum {
+            values: vec![0f32; BUFFER_SIZE],
+            bin_size: 0f32,
+        }
+    }
 }
 
 pub struct Player {
@@ -27,14 +36,14 @@ pub struct Player {
     position: Arc<AtomicUsize>,
     buffer: Arc<Vec<i16>>,
     fft: Arc<dyn Fft<f32>>,
-    rb: Arc<Mutex<Fixed<[i32; BUFFER_SIZE]>>>,
     hamming_window: Vec<f32>,
     output_len: usize,
+    fft_output: FftSpectrum,
+    buffer_consumer: Option<Consumer<f32>>,
 }
 
 impl Player {
     pub fn new() -> Self {
-        let rb = Arc::new(Mutex::new(Fixed::from([0; BUFFER_SIZE])));
         let mut fft_planner = FftPlanner::new();
         let hamming_window: Vec<f32> = hamming_iter(BUFFER_SIZE)
             .map(|f| f as f32)
@@ -48,9 +57,10 @@ impl Player {
             position: Arc::new(AtomicUsize::new(0)),
             buffer: Arc::new(Vec::new()),
             fft: fft_planner.plan_fft_forward(BUFFER_SIZE),
-            rb,
             hamming_window,
             output_len: BUFFER_SIZE,
+            fft_output: FftSpectrum::empty(),
+            buffer_consumer: None,
         }
     }
 
@@ -93,7 +103,9 @@ impl Player {
             .expect("Could not find supported audio config")
             .with_sample_rate(self.sample_rate);
 
-        let rb = self.rb.clone();
+        let (mut producer, consumer) = RingBuffer::new(BUFFER_SIZE * 3);
+        self.buffer_consumer = Some(consumer);
+
         let buffer = self.buffer.clone();
         let position = self.position.clone();
 
@@ -102,14 +114,11 @@ impl Player {
                 &supported_config.into(),
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     let mut pos = position.load(Ordering::Relaxed);
-                    let mut r_b = rb.lock().unwrap();
                     for sample in data.iter_mut() {
                         let value = if pos < buffer.len() { buffer[pos] } else { 0 };
                         *sample = cpal::Sample::from_sample(value);
 
-                        let mut n = r_b.clone();
-                        n.push(value as i32);
-                        *r_b = n;
+                        producer.push(value as f32).unwrap();
 
                         pos += 1;
                     }
@@ -156,17 +165,21 @@ impl Player {
         }
     }
 
-    pub fn get_fft_spectrum(&self) -> FftSpectrum {
-        let rb = *self.rb.lock().unwrap();
+    pub fn get_fft_spectrum(&mut self) -> &FftSpectrum {
+        if self.buffer_consumer == None {
+            return &self.fft_output;
+        }
 
-        let (left, right) = rb.slices();
+        let consumer = self.buffer_consumer.as_mut().unwrap();
+        if consumer.slots() < BUFFER_SIZE {
+            return &self.fft_output;
+        }
 
-        let data = &[left, right].concat();
-
-        let mut buffer = data.iter()
-            .enumerate()
-            .map(|(i, sample)| Complex::new(self.hamming_window[i] * sample.clone() as f32, 0f32))
-            .collect::<Vec<_>>();
+        let mut buffer: Vec<Complex<f32>> = vec![];
+        for i in 0..BUFFER_SIZE {
+            let sample = consumer.pop().unwrap();
+            buffer.push(Complex::new(self.hamming_window[i] * sample.clone(), 0f32));
+        }
 
         self.fft.process(&mut buffer);
 
@@ -177,10 +190,13 @@ impl Player {
 
         let bin_size: f32 = self.sample_rate.0 as f32 / BUFFER_SIZE as f32 * 2.;
 
-        FftSpectrum {
+        let output = FftSpectrum {
             values,
             bin_size,
-        }
+        };
+
+        self.fft_output = output;
+        &self.fft_output
     }
 
     fn seconds_to_samples(&self, seconds: f32) -> i32 {
