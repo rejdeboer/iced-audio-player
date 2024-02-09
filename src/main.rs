@@ -128,6 +128,10 @@ impl Application for AudioPlayer {
             .into()
     }
 
+    fn theme(&self) -> Self::Theme {
+        Theme::Dark
+    }
+
     fn subscription(&self) -> Subscription<Self::Message> {
         window::frames().map(Message::Tick)
     }
