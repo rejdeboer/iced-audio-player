@@ -1,7 +1,6 @@
-use std::path::PathBuf;
 use iced_audio_player::scene::{Scene};
 
-use iced::executor;
+use iced::{executor};
 use iced::time::Instant;
 use iced::widget::{column, container, row, shader, button, slider, text};
 use iced::window;
@@ -9,10 +8,15 @@ use iced::{
     Alignment, Application, Command, Element, Length, Subscription,
     Theme,
 };
+use iced_audio_player::icon::Icon;
+use iced_audio_player::message::Message;
 use iced_audio_player::player::Player;
 
 fn main() -> iced::Result {
-    AudioPlayer::run(iced::Settings::default())
+    AudioPlayer::run(iced::Settings {
+        fonts: vec![include_bytes!("../fonts/icons.ttf").as_slice().into()],
+        ..iced::Settings::default()
+    })
 }
 
 struct AudioPlayer {
@@ -24,15 +28,6 @@ struct AudioPlayer {
     duration: f32,
 }
 
-#[derive(Debug, Clone)]
-enum Message {
-    Tick(Instant),
-    Play,
-    Pause,
-    LoadFile(PathBuf),
-    SetPositionPreview(f32),
-    SetPosition,
-}
 
 impl Application for AudioPlayer {
     type Executor = executor::Default;
@@ -97,9 +92,9 @@ impl Application for AudioPlayer {
 
         let load_file_btn = button("Load file").on_press(Message::LoadFile("./media/song.wav".into()));
         let play_btn = if self.player.is_playing() {
-            button("Pause").on_press(Message::Pause)
+            button(Icon::PAUSE.into()).on_press(Message::Pause)
         } else {
-            button("Play").on_press(Message::Play)
+            button(Icon::PLAY.into()).on_press(Message::Play)
         };
 
         let seek_bar = slider(0f32..=self.duration, self.seek_bar_value, Message::SetPositionPreview)
@@ -110,7 +105,7 @@ impl Application for AudioPlayer {
         let top_controls = row![
             load_file_btn,
             play_btn,
-        ];
+        ].spacing(10);
 
         let bottom_controls = row![time_played_label, seek_bar, duration_label]
             .spacing(10);
