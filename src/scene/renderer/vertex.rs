@@ -25,7 +25,7 @@ impl Vertex {
     }
 }
 
-pub fn generate_vertices(data: &[f32]) -> Vec<Vertex> {
+pub fn generate_spectrum_vertices(data: &[f32]) -> Vec<Vertex> {
     let mut vertices: Vec<Vertex> = vec![];
 
     for (i, vertex) in data.iter().enumerate() {

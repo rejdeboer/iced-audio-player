@@ -8,7 +8,7 @@ pub enum Icon {
 }
 
 impl Icon {
-    pub fn into<'a>(self) -> Element<'a, Message> {
+    pub fn into_element<'a>(self) -> Element<'a, Message> {
         match self {
             Icon::PLAY => icon_to_element('\u{E805}'),
             Icon::PAUSE => icon_to_element('\u{E807}'),

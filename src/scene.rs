@@ -11,7 +11,7 @@ use iced::{Rectangle, Size};
 use crate::player::FftSpectrum;
 use spectrometer::Spectrometer;
 
-const RESOLUTION: usize = 300_000;
+const RESOLUTION: usize = 200_000;
 
 pub struct Scene {
     spectrometer: Spectrometer,
@@ -58,7 +58,7 @@ impl Primitive {
     pub fn new(
         spectrum: &[f32],
     ) -> Self {
-        let vertices = renderer::vertex::generate_vertices(spectrum);
+        let vertices = renderer::vertex::generate_spectrum_vertices(spectrum);
         Self {
             vertices,
         }

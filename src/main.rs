@@ -92,9 +92,9 @@ impl Application for AudioPlayer {
 
         let load_file_btn = button("Load file").on_press(Message::LoadFile("./media/song.wav".into()));
         let play_btn = if self.player.is_playing() {
-            button(Icon::PAUSE.into()).on_press(Message::Pause)
+            button(Icon::PAUSE.into_element()).on_press(Message::Pause)
         } else {
-            button(Icon::PLAY.into()).on_press(Message::Play)
+            button(Icon::PLAY.into_element()).on_press(Message::Play)
         };
 
         let seek_bar = slider(0f32..=self.duration, self.seek_bar_value, Message::SetPositionPreview)
