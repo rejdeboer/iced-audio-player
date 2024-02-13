@@ -2,7 +2,7 @@ use iced_audio_player::scene::Scene;
 
 use iced::executor;
 use iced::time::Instant;
-use iced::widget::{column, container, row, shader, button, slider, text};
+use iced::widget::{button, column, container, row, slider, text};
 use iced::window;
 use iced::{
     Alignment, Application, Command, Element, Length, Subscription, Theme,
@@ -14,6 +14,7 @@ use iced_audio_player::player::Player;
 fn main() -> iced::Result {
     AudioPlayer::run(iced::Settings {
         fonts: vec![include_bytes!("../fonts/icons.ttf").as_slice().into()],
+        antialiasing: true,
         ..iced::Settings::default()
     })
 }
@@ -88,8 +89,7 @@ impl Application for AudioPlayer {
 
     #[allow(unused)]
     fn view(&self) -> Element<'_, Self::Message> {
-        let shader =
-            shader(&self.scene).width(Length::Fill).height(Length::Fill);
+        let canvas = self.scene.view();
 
         let load_file_btn = button("Load file")
             .on_press(Message::LoadFile("./media/song.wav".into()));
@@ -119,12 +119,7 @@ impl Application for AudioPlayer {
             .padding(10)
             .spacing(10);
 
-        let controls = column![
-            top_controls,
-            bottom_controls,
-        ].align_items(Alignment::Center).padding(10).spacing(10);
-
-        container(column![shader, controls].align_items(Alignment::Center))
+        container(column![canvas, controls].align_items(Alignment::Center))
             .width(Length::Fill)
             .height(Length::Fill)
             .center_x()

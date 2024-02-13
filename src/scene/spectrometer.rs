@@ -1,7 +1,7 @@
 use crate::player::{FftSpectrum, BUFFER_SIZE};
 use std::time::Duration;
 
-const SMOOTHING_SPEED: f32 = 7.;
+const SMOOTHING_SPEED: f32 = 5.;
 
 #[derive(Clone, Debug)]
 struct FrequencyVertex {

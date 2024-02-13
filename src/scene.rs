@@ -1,21 +1,22 @@
-mod renderer;
 mod spectrometer;
 
-use renderer::Renderer;
-
-use iced::mouse;
+use iced::mouse::Cursor;
 use iced::time::Duration;
-use iced::widget::shader;
+use iced::widget::canvas::{stroke, Cache, Geometry, Path, Stroke};
+use iced::widget::{canvas, Canvas};
+use iced::{Color, Element, Length, Point, Renderer, Theme};
 use iced::{Rectangle, Size};
 
+use crate::message::Message;
 use crate::player::FftSpectrum;
 use spectrometer::Spectrometer;
 
-const RESOLUTION: usize = 200_000;
+const RESOLUTION: usize = 2000;
 
 pub struct Scene {
     spectrometer: Spectrometer,
     spectrum: Vec<f32>,
+    cache: Cache,
 }
 
 impl Scene {
@@ -23,88 +24,79 @@ impl Scene {
         let scene = Self {
             spectrometer: Spectrometer::new(RESOLUTION),
             spectrum: vec![0f32; RESOLUTION],
+            cache: Cache::default(),
         };
 
         scene
     }
 
-    pub fn update(&mut self, fft_spectrum: &FftSpectrum, dt: Duration) {
+    pub fn update_spectrum(
+        &mut self,
+        fft_spectrum: &FftSpectrum,
+        dt: Duration,
+    ) {
+        self.cache.clear();
         self.spectrum = self.spectrometer.generate_spectrum(fft_spectrum, dt);
+    }
+
+    pub fn view(&self) -> Element<Message> {
+        Canvas::new(self)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
     }
 }
 
-impl<Message> shader::Program<Message> for Scene {
+impl<Message> canvas::Program<Message> for Scene {
     type State = ();
-    type Primitive = Primitive;
 
     fn draw(
         &self,
         _state: &Self::State,
-        _cursor: mouse::Cursor,
-        _bounds: Rectangle,
-    ) -> Self::Primitive {
-        Primitive::new(
-            &self.spectrum,
-        )
+        renderer: &Renderer,
+        theme: &Theme,
+        bounds: Rectangle,
+        _cursor: Cursor,
+    ) -> Vec<Geometry> {
+        let geometry = self.cache.draw(renderer, bounds.size(), |frame| {
+            let frame_size = frame.size();
+            let points = get_points_for_spectrum(&self.spectrum, frame_size);
+
+            let path = Path::new(|b| {
+                b.move_to(Point::new(0f32, frame_size.height));
+
+                for point in points {
+                    b.line_to(point);
+                }
+
+                b.line_to(Point::new(frame_size.width, frame_size.height));
+            });
+
+            frame.fill(&path, Color::from_rgba8(108, 122, 137, 0.3));
+            frame.stroke(
+                &path,
+                Stroke {
+                    style: stroke::Style::Solid(theme.palette().text),
+                    width: 1.0,
+                    ..Stroke::default()
+                },
+            );
+        });
+
+        vec![geometry]
     }
 }
 
-#[derive(Debug)]
-pub struct Primitive {
-    vertices: Vec<renderer::vertex::Vertex>,
-}
+fn get_points_for_spectrum(data: &[f32], frame_size: Size) -> Vec<Point> {
+    let mut points: Vec<Point> = vec![];
+    let step_size = frame_size.width / data.len() as f32;
 
-impl Primitive {
-    pub fn new(
-        spectrum: &[f32],
-    ) -> Self {
-        let vertices = renderer::vertex::generate_spectrum_vertices(spectrum);
-        Self {
-            vertices,
-        }
-    }
-}
+    for (i, vertex) in data.iter().enumerate() {
+        let x = i as f32 * step_size;
+        let y = frame_size.height - vertex * frame_size.height * 0.7;
 
-impl shader::Primitive for Primitive {
-    fn prepare(
-        &self,
-        format: wgpu::TextureFormat,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        _bounds: Rectangle,
-        _target_size: Size<u32>,
-        _scale_factor: f32,
-        storage: &mut shader::Storage,
-    ) {
-        if !storage.has::<Renderer>() {
-            storage.store(Renderer::new(device, format, RESOLUTION));
-        }
-
-        let pipeline = storage.get_mut::<Renderer>().unwrap();
-
-        // upload data to GPU
-        pipeline.update(
-            queue,
-            &self.vertices,
-        );
+        points.push(Point::new(x, y));
     }
 
-    fn render(
-        &self,
-        storage: &shader::Storage,
-        target: &wgpu::TextureView,
-        _target_size: Size<u32>,
-        viewport: Rectangle<u32>,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
-        // at this point our pipeline should always be initialized
-        let pipeline = storage.get::<Renderer>().unwrap();
-
-        // render primitive
-        pipeline.render(
-            target,
-            encoder,
-            viewport,
-        );
-    }
+    points
 }
