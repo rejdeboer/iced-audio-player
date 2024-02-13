@@ -62,7 +62,7 @@ impl Spectrometer {
     fn apply_logarithmic_scaling(&self, vertices: &mut Vec<FrequencyVertex>) {
         for vertex in vertices {
             vertex.position = vertex.position.sqrt();
-            vertex.volume = vertex.volume.sqrt();
+            vertex.volume = (vertex.volume + 1.0).log10();
         }
     }
 
@@ -70,7 +70,7 @@ impl Spectrometer {
         &self,
         vertices: &mut Vec<FrequencyVertex>,
     ) {
-        let max_vol = 3000.;
+        let max_vol = 7.5;
         let max_pos = match vertices.last() {
             Some(vertex) => vertex.position,
             None => 1f32,
