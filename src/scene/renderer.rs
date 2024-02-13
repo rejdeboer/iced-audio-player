@@ -1,8 +1,8 @@
 pub mod vertex;
 
-use vertex::{Vertex};
+use vertex::Vertex;
 
-use iced::{Rectangle};
+use iced::Rectangle;
 use wgpu::util::DeviceExt;
 
 pub struct Renderer {
@@ -21,21 +21,22 @@ impl Renderer {
         let indices = get_indices(resolution);
         let num_indices = indices.len() as u32;
 
-        let vertex_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
+        let vertex_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(vec![Vertex::empty(); resolution*2].as_slice()),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            }
-        );
+                contents: bytemuck::cast_slice(
+                    vec![Vertex::empty(); resolution * 2].as_slice(),
+                ),
+                usage: wgpu::BufferUsages::VERTEX
+                    | wgpu::BufferUsages::COPY_DST,
+            });
 
-        let index_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
+        let index_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Index Buffer"),
                 contents: bytemuck::cast_slice(indices.as_slice()),
                 usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            }
-        );
+            });
 
         let layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -107,11 +108,7 @@ impl Renderer {
         }
     }
 
-    pub fn update(
-        &mut self,
-        queue: &wgpu::Queue,
-        vertices: &[Vertex],
-    ) {
+    pub fn update(&mut self, queue: &wgpu::Queue, vertices: &[Vertex]) {
         queue.write_buffer(
             &self.vertex_buffer,
             0,
@@ -154,7 +151,10 @@ impl Renderer {
             );
             pass.set_pipeline(&self.pipeline);
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            pass.set_index_buffer(
+                self.index_buffer.slice(..),
+                wgpu::IndexFormat::Uint32,
+            );
             pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
     }
@@ -172,4 +172,3 @@ fn get_indices(size: usize) -> Vec<u32> {
 
     indices
 }
-

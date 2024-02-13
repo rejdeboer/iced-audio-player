@@ -1,5 +1,5 @@
-use std::time::{Duration};
-use crate::player::{BUFFER_SIZE, FftSpectrum};
+use crate::player::{FftSpectrum, BUFFER_SIZE};
+use std::time::Duration;
 
 const SMOOTHING_SPEED: f32 = 7.;
 
@@ -33,8 +33,14 @@ impl Spectrometer {
         }
     }
 
-    pub fn generate_spectrum(&mut self, fft_spectrum: &FftSpectrum, dt: Duration) -> Vec<f32> {
-        let mut vertices = fft_spectrum.values.iter()
+    pub fn generate_spectrum(
+        &mut self,
+        fft_spectrum: &FftSpectrum,
+        dt: Duration,
+    ) -> Vec<f32> {
+        let mut vertices = fft_spectrum
+            .values
+            .iter()
             .enumerate()
             .map(|(i, magnitude)| FrequencyVertex {
                 position: i as f32,
@@ -48,9 +54,7 @@ impl Spectrometer {
         self.apply_smoothing(&mut vertices, dt);
         vertices = self.get_interpolated_vertices(vertices);
 
-        let spectrum = vertices.iter()
-            .map(|vertex| vertex.volume)
-            .collect();
+        let spectrum = vertices.iter().map(|vertex| vertex.volume).collect();
 
         spectrum
     }
@@ -62,7 +66,10 @@ impl Spectrometer {
         }
     }
 
-    fn apply_normalised_positioning(&self, vertices: &mut Vec<FrequencyVertex>) {
+    fn apply_normalised_positioning(
+        &self,
+        vertices: &mut Vec<FrequencyVertex>,
+    ) {
         let max_vol = 3000.;
         let max_pos = match vertices.last() {
             Some(vertex) => vertex.position,
@@ -74,22 +81,39 @@ impl Spectrometer {
         }
     }
 
-    fn apply_smoothing(&mut self, vertices: &mut Vec<FrequencyVertex>, dt: Duration) {
+    fn apply_smoothing(
+        &mut self,
+        vertices: &mut Vec<FrequencyVertex>,
+        dt: Duration,
+    ) {
         for (i, vertex) in vertices.iter_mut().enumerate() {
             if !vertex.volume.is_nan() {
-                self.smoothing_buffer[i] += (vertex.volume - self.smoothing_buffer[i]) * dt.as_secs_f32() * SMOOTHING_SPEED;
+                self.smoothing_buffer[i] += (vertex.volume
+                    - self.smoothing_buffer[i])
+                    * dt.as_secs_f32()
+                    * SMOOTHING_SPEED;
             }
             vertex.volume = self.smoothing_buffer[i];
-        };
+        }
     }
 
     // Source: https://codeberg.org/BrunoWallner/audioviz/src/branch/main/src/spectrum/processor.rs
-    fn get_interpolated_vertices(&self, vertices: Vec<FrequencyVertex>) -> Vec<FrequencyVertex> {
-        let mut interpolated: Vec<FrequencyVertex> = vec![FrequencyVertex::empty(); self.resolution];
+    fn get_interpolated_vertices(
+        &self,
+        vertices: Vec<FrequencyVertex>,
+    ) -> Vec<FrequencyVertex> {
+        let mut interpolated: Vec<FrequencyVertex> =
+            vec![FrequencyVertex::empty(); self.resolution];
 
         let mut fb = vertices.clone();
 
-        fb.insert(0, vertices.first().unwrap_or(&FrequencyVertex::empty()).clone());
+        fb.insert(
+            0,
+            vertices
+                .first()
+                .unwrap_or(&FrequencyVertex::empty())
+                .clone(),
+        );
         fb.push(FrequencyVertex::empty());
 
         if fb.len() > 4 {
@@ -99,8 +123,10 @@ impl Spectrometer {
                 let y2 = fb[i + 2].volume;
                 let y3 = fb[i + 3].volume;
 
-                let start = (fb[i + 1].position * interpolated.len() as f32) as usize;
-                let end = (fb[i + 2].position * interpolated.len() as f32) as usize;
+                let start =
+                    (fb[i + 1].position * interpolated.len() as f32) as usize;
+                let end =
+                    (fb[i + 2].position * interpolated.len() as f32) as usize;
 
                 if start < self.resolution && end < self.resolution {
                     for j in start..=end {
@@ -129,7 +155,9 @@ impl Spectrometer {
                         let f2 = fb[i + 2].frequency;
                         let frequency = f1 * (1.0 - t) + f2 * t;
 
-                        if interpolated.len() > j && interpolated[j].volume < volume {
+                        if interpolated.len() > j
+                            && interpolated[j].volume < volume
+                        {
                             interpolated[j] = FrequencyVertex {
                                 volume,
                                 frequency,

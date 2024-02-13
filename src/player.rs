@@ -1,14 +1,13 @@
+use apodize::hamming_iter;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{ChannelCount, Stream};
-use hound::{WavReader};
+use hound::WavReader;
 use rtrb::{Consumer, RingBuffer};
-use std::path::{PathBuf};
-use std::sync::{Arc};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use apodize::hamming_iter;
-use log::info;
-use rustfft::{Fft, FftPlanner};
 use rustfft::num_complex::Complex;
+use rustfft::{Fft, FftPlanner};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 pub const BUFFER_SIZE: usize = 4096;
 
@@ -65,15 +64,14 @@ impl Player {
     }
 
     pub fn load_file(&mut self, path: PathBuf) {
-        info!("Reading file: {}", path.file_name().unwrap().to_string_lossy());
-        let mut reader = WavReader::open(path).expect("Failed to open wav file");
+        let mut reader =
+            WavReader::open(path).expect("Failed to open wav file");
 
         let spec = reader.spec();
-        let samples: Vec<i16> = reader.samples()
+        let samples: Vec<i16> = reader
+            .samples()
             .map(|sample| sample.expect("Failed to get sample"))
             .collect();
-
-        info!("WAV SPEC: {} CHANNELS and sample rate of {}", spec.channels, spec.sample_rate);
 
         self.sample_rate = cpal::SampleRate(spec.sample_rate);
         self.channels = spec.channels;
@@ -110,29 +108,39 @@ impl Player {
         let position = self.position.clone();
 
         self.stream = Some(
-            device.build_output_stream(
-                &supported_config.into(),
-                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    let mut pos = position.load(Ordering::Relaxed);
-                    for sample in data.iter_mut() {
-                        let value = if pos < buffer.len() { buffer[pos] } else { 0 };
-                        *sample = cpal::Sample::from_sample(value);
+            device
+                .build_output_stream(
+                    &supported_config.into(),
+                    move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                        let mut pos = position.load(Ordering::Relaxed);
+                        for sample in data.iter_mut() {
+                            let value = if pos < buffer.len() {
+                                buffer[pos]
+                            } else {
+                                0
+                            };
+                            *sample = cpal::Sample::from_sample(value);
 
-                        // If the buffer is full, we should do one of the following:
-                        // - Increase BUFFER_SIZE
-                        // - Optimize UI thread
-                        // - Decrease spectrum resolution
-                        if let Some(_) = producer.push(value as f32).err() {
-                            eprintln!("Ring buffer is full");
+                            // If the buffer is full, we should do one of the following:
+                            // - Increase BUFFER_SIZE
+                            // - Optimize UI thread
+                            // - Decrease spectrum resolution
+                            if let Some(_) = producer.push(value as f32).err() {
+                                eprintln!("Ring buffer is full");
+                            }
+
+                            pos += 1;
                         }
-
-                        pos += 1;
-                    }
-                    _ = position.compare_exchange(pos - data.len(), pos, Ordering::Relaxed, Ordering::Relaxed);
-                },
-                move |_err| panic!("ERROR"),
-                None,
-            )
+                        _ = position.compare_exchange(
+                            pos - data.len(),
+                            pos,
+                            Ordering::Relaxed,
+                            Ordering::Relaxed,
+                        );
+                    },
+                    move |_err| panic!("ERROR"),
+                    None,
+                )
                 .expect("Building output stream failed"),
         );
         self.is_playing = true;
@@ -140,7 +148,6 @@ impl Player {
 
     pub fn play(&mut self) {
         if let Some(ref stream) = self.stream {
-            info!("Playing stream");
             stream.play().unwrap();
             self.is_playing = true;
             return;
@@ -148,7 +155,8 @@ impl Player {
     }
 
     pub fn set_position(&mut self, seconds: f32) {
-        let new_position: usize = self.seconds_to_samples(seconds).max(0) as usize;
+        let new_position: usize =
+            self.seconds_to_samples(seconds).max(0) as usize;
         self.position.store(new_position, Ordering::Relaxed);
     }
 
@@ -184,24 +192,23 @@ impl Player {
         let mut buffer: Vec<Complex<f32>> = vec![];
         for i in 0..BUFFER_SIZE {
             let sample = consumer.pop().unwrap();
-            buffer.push(Complex::new(self.hamming_window[i] * sample.clone(), 0f32));
+            buffer.push(Complex::new(
+                self.hamming_window[i] * sample.clone(),
+                0f32,
+            ));
         }
 
         self.fft.process(&mut buffer);
 
-        let values = buffer.iter()
+        self.fft_output.values = buffer
+            .iter()
             .take(self.output_len)
             .map(|elem| elem.norm())
             .collect::<Vec<_>>();
 
-        let bin_size: f32 = self.sample_rate.0 as f32 / BUFFER_SIZE as f32 * 2.;
+        self.fft_output.bin_size =
+            self.sample_rate.0 as f32 / BUFFER_SIZE as f32 * 2.;
 
-        let output = FftSpectrum {
-            values,
-            bin_size,
-        };
-
-        self.fft_output = output;
         &self.fft_output
     }
 

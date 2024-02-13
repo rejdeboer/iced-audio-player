@@ -1,6 +1,6 @@
-use iced::{Element, Font};
-use iced::widget::text;
 use crate::message::Message;
+use iced::widget::text;
+use iced::{Element, Font};
 
 pub enum Icon {
     PLAY,

@@ -1,12 +1,11 @@
-use iced_audio_player::scene::{Scene};
+use iced_audio_player::scene::Scene;
 
-use iced::{executor};
+use iced::executor;
 use iced::time::Instant;
 use iced::widget::{column, container, row, shader, button, slider, text};
 use iced::window;
 use iced::{
-    Alignment, Application, Command, Element, Length, Subscription,
-    Theme,
+    Alignment, Application, Command, Element, Length, Subscription, Theme,
 };
 use iced_audio_player::icon::Icon;
 use iced_audio_player::message::Message;
@@ -27,7 +26,6 @@ struct AudioPlayer {
     seek_bar_dragging: bool,
     duration: f32,
 }
-
 
 impl Application for AudioPlayer {
     type Executor = executor::Default;
@@ -59,7 +57,10 @@ impl Application for AudioPlayer {
                 if !self.seek_bar_dragging {
                     self.seek_bar_value = self.player.get_position();
                 }
-                self.scene.update(&self.player.get_fft_spectrum(), time - self.last_updated);
+                self.scene.update_spectrum(
+                    &self.player.get_fft_spectrum(),
+                    time - self.last_updated,
+                );
                 self.last_updated = time;
             }
             Message::Play => {
@@ -90,24 +91,32 @@ impl Application for AudioPlayer {
         let shader =
             shader(&self.scene).width(Length::Fill).height(Length::Fill);
 
-        let load_file_btn = button("Load file").on_press(Message::LoadFile("./media/song.wav".into()));
+        let load_file_btn = button("Load file")
+            .on_press(Message::LoadFile("./media/song.wav".into()));
         let play_btn = if self.player.is_playing() {
             button(Icon::PAUSE.into_element()).on_press(Message::Pause)
         } else {
             button(Icon::PLAY.into_element()).on_press(Message::Play)
         };
 
-        let seek_bar = slider(0f32..=self.duration, self.seek_bar_value, Message::SetPositionPreview)
-            .on_release(Message::SetPosition);
-        let time_played_label = text(seconds_to_minutes(self.seek_bar_value)).width(35);
+        let seek_bar = slider(
+            0f32..=self.duration,
+            self.seek_bar_value,
+            Message::SetPositionPreview,
+        )
+        .on_release(Message::SetPosition);
+        let time_played_label =
+            text(seconds_to_minutes(self.seek_bar_value)).width(35);
         let duration_label = text(seconds_to_minutes(self.duration)).width(35);
 
-        let top_controls = row![
-            load_file_btn,
-            play_btn,
-        ].spacing(10);
+        let top_controls = row![load_file_btn, play_btn,].spacing(10);
 
-        let bottom_controls = row![time_played_label, seek_bar, duration_label]
+        let bottom_controls =
+            row![time_played_label, seek_bar, duration_label].spacing(10);
+
+        let controls = column![top_controls, bottom_controls,]
+            .align_items(Alignment::Center)
+            .padding(10)
             .spacing(10);
 
         let controls = column![
