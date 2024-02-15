@@ -1,15 +1,17 @@
 use iced_audio_player::scene::Scene;
 
-use iced::executor;
+use iced::alignment::Vertical;
 use iced::time::Instant;
 use iced::widget::{button, column, container, row, slider, text};
-use iced::window;
+use iced::{event, executor, Event};
+use iced::{theme, window};
 use iced::{
     Alignment, Application, Command, Element, Length, Subscription, Theme,
 };
 use iced_audio_player::icon::Icon;
 use iced_audio_player::message::Message;
 use iced_audio_player::player::Player;
+use iced_audio_player::widget::CircleButtonStyle;
 
 fn main() -> iced::Result {
     AudioPlayer::run(iced::Settings {
@@ -89,15 +91,33 @@ impl Application for AudioPlayer {
 
     #[allow(unused)]
     fn view(&self) -> Element<'_, Self::Message> {
-        let canvas = self.scene.view();
+        let canvas = if self.player.is_streaming() {
+            self.scene.view()
+        } else {
+            container(
+                text("Drop your WAV file here")
+                    .vertical_alignment(Vertical::Center),
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x()
+            .center_y()
+            .into()
+        };
 
-        let load_file_btn = button("Load file")
-            .on_press(Message::LoadFile("./media/song.wav".into()));
-        let play_btn = if self.player.is_playing() {
+        let mut play_btn = if !self.player.is_streaming() {
+            button(Icon::PLAY.into_element())
+        } else if self.player.is_playing() {
             button(Icon::PAUSE.into_element()).on_press(Message::Pause)
         } else {
             button(Icon::PLAY.into_element()).on_press(Message::Play)
         };
+        play_btn =
+            play_btn
+                .padding([5, 10])
+                .style(theme::Button::Custom(Box::new(
+                    CircleButtonStyle::new(theme::Button::Primary),
+                )));
 
         let seek_bar = slider(
             0f32..=self.duration,
@@ -109,7 +129,7 @@ impl Application for AudioPlayer {
             text(seconds_to_minutes(self.seek_bar_value)).width(35);
         let duration_label = text(seconds_to_minutes(self.duration)).width(35);
 
-        let top_controls = row![load_file_btn, play_btn,].spacing(10);
+        let top_controls = row![play_btn].spacing(10);
 
         let bottom_controls =
             row![time_played_label, seek_bar, duration_label].spacing(10);
@@ -132,7 +152,17 @@ impl Application for AudioPlayer {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        window::frames().map(Message::Tick)
+        let mut subscriptions: Vec<Subscription<Self::Message>> = vec![];
+
+        subscriptions.push(window::frames().map(Message::Tick));
+        subscriptions.push(event::listen_with(|event, _| match event {
+            Event::Window(_, window::Event::FileDropped(path)) => {
+                Some(Message::LoadFile(path))
+            }
+            _ => None,
+        }));
+
+        Subscription::batch(subscriptions)
     }
 }
 

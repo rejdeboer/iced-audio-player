@@ -171,6 +171,10 @@ impl Player {
     pub fn is_playing(&self) -> bool {
         self.is_playing
     }
+    
+    pub fn is_streaming(&self) -> bool {
+        self.stream.is_some()
+    }
 
     pub fn pause(&mut self) {
         if let Some(ref stream) = self.stream {
