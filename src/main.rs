@@ -125,6 +125,7 @@ impl Application for AudioPlayer {
             Message::SetPositionPreview,
         )
         .on_release(Message::SetPosition);
+
         let time_played_label =
             text(seconds_to_minutes(self.seek_bar_value)).width(35);
         let duration_label = text(seconds_to_minutes(self.duration)).width(35);

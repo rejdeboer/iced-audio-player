@@ -1,13 +1,16 @@
 use apodize::hamming_iter;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{ChannelCount, Stream};
-use hound::WavReader;
+use hound::{WavIntoSamples, WavReader};
 use rtrb::{Consumer, RingBuffer};
 use rustfft::num_complex::Complex;
 use rustfft::{Fft, FftPlanner};
+use std::fs::File;
+use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 pub const BUFFER_SIZE: usize = 4096;
 
@@ -33,7 +36,7 @@ pub struct Player {
     stream: Option<Stream>,
     is_playing: bool,
     position: Arc<AtomicUsize>,
-    buffer: Arc<Vec<i16>>,
+    samples_amount: usize,
     fft: Arc<dyn Fft<f32>>,
     hamming_window: Vec<f32>,
     output_len: usize,
@@ -54,7 +57,7 @@ impl Player {
             stream: None,
             is_playing: false,
             position: Arc::new(AtomicUsize::new(0)),
-            buffer: Arc::new(Vec::new()),
+            samples_amount: 0,
             fft: fft_planner.plan_fft_forward(BUFFER_SIZE),
             hamming_window,
             output_len: BUFFER_SIZE,
@@ -64,18 +67,30 @@ impl Player {
     }
 
     pub fn load_file(&mut self, path: PathBuf) {
-        let mut reader =
-            WavReader::open(path).expect("Failed to open wav file");
+        let reader = WavReader::open(path).expect("Failed to open wav file");
 
         let spec = reader.spec();
-        let samples: Vec<i16> = reader
-            .samples()
-            .map(|sample| sample.expect("Failed to get sample"))
-            .collect();
+        let samples: WavIntoSamples<BufReader<File>, i16> =
+            reader.into_samples();
+
+        let (mut input_producer, mut input_consumer) =
+            RingBuffer::new(BUFFER_SIZE * 3);
+        self.samples_amount = samples.len();
+
+        std::thread::spawn(move || {
+            for sample in samples {
+                while input_producer.is_full() {
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+
+                input_producer
+                    .push(sample.expect("Failed to read sample"))
+                    .expect("Failed to push sample");
+            }
+        });
 
         self.sample_rate = cpal::SampleRate(spec.sample_rate);
         self.channels = spec.channels;
-        self.buffer = Arc::new(samples);
         self.position.store(0, Ordering::Relaxed);
 
         let bin_size: f32 = self.sample_rate.0 as f32 / BUFFER_SIZE as f32 * 2.;
@@ -101,10 +116,10 @@ impl Player {
             .expect("Could not find supported audio config")
             .with_sample_rate(self.sample_rate);
 
-        let (mut producer, consumer) = RingBuffer::new(BUFFER_SIZE * 3);
-        self.buffer_consumer = Some(consumer);
+        let (mut output_producer, output_consumer) =
+            RingBuffer::new(BUFFER_SIZE * 3);
+        self.buffer_consumer = Some(output_consumer);
 
-        let buffer = self.buffer.clone();
         let position = self.position.clone();
 
         self.stream = Some(
@@ -114,18 +129,16 @@ impl Player {
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                         let mut pos = position.load(Ordering::Relaxed);
                         for sample in data.iter_mut() {
-                            let value = if pos < buffer.len() {
-                                buffer[pos]
-                            } else {
-                                0
-                            };
+                            let value = input_consumer.pop().unwrap();
                             *sample = cpal::Sample::from_sample(value);
 
                             // If the buffer is full, we should do one of the following:
                             // - Increase BUFFER_SIZE
                             // - Optimize UI thread
                             // - Decrease spectrum resolution
-                            if let Some(_) = producer.push(value as f32).err() {
+                            if let Some(_) =
+                                output_producer.push(value as f32).err()
+                            {
                                 eprintln!("Ring buffer is full");
                             }
 
@@ -165,13 +178,13 @@ impl Player {
     }
 
     pub fn get_duration(&self) -> f32 {
-        self.samples_to_seconds(self.buffer.len())
+        self.samples_to_seconds(self.samples_amount)
     }
 
     pub fn is_playing(&self) -> bool {
         self.is_playing
     }
-    
+
     pub fn is_streaming(&self) -> bool {
         self.stream.is_some()
     }
