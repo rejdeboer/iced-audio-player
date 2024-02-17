@@ -1,6 +1,6 @@
 use apodize::hamming_iter;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{ChannelCount, Stream};
+use cpal::{ChannelCount, Device, Stream, SupportedStreamConfig};
 use hound::WavReader;
 use rtrb::{Consumer, RingBuffer};
 use rustfft::num_complex::Complex;
@@ -29,6 +29,7 @@ impl FftSpectrum {
 }
 
 pub struct Player {
+    device: Device,
     sample_rate: cpal::SampleRate,
     channels: ChannelCount,
     stream: Option<Stream>,
@@ -49,7 +50,14 @@ impl Player {
             .map(|f| f as f32)
             .collect::<Vec<f32>>();
 
+        let host = cpal::default_host();
+
+        let device = host
+            .default_output_device()
+            .expect("no output device available");
+
         Self {
+            device,
             sample_rate: cpal::SampleRate(44100),
             channels: 2,
             stream: None,
@@ -111,32 +119,14 @@ impl Player {
         let bin_size: f32 = self.sample_rate.0 as f32 / BUFFER_SIZE as f32 * 2.;
         self.output_len = (MAX_FREQUENCY / bin_size).ceil() as usize;
 
-        let host = cpal::default_host();
-
-        let device = host
-            .default_output_device()
-            .expect("no output device available");
-
-        let mut supported_configs_range = device
-            .supported_output_configs()
-            .expect("error while querying configs");
-
-        let supported_config = supported_configs_range
-            .find(|range| {
-                range.sample_format() == cpal::SampleFormat::F32
-                    && range.max_sample_rate() >= self.sample_rate
-                    && range.min_sample_rate() <= self.sample_rate
-                    && range.channels() == self.channels
-            })
-            .expect("Could not find supported audio config")
-            .with_sample_rate(self.sample_rate);
-
         let (mut output_producer, output_consumer) =
             RingBuffer::new(BUFFER_SIZE * 3);
         self.buffer_consumer = Some(output_consumer);
 
+        let supported_config = self.get_stream_config();
+
         self.stream = Some(
-            device
+            self.device
                 .build_output_stream(
                     &supported_config.into(),
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
@@ -238,5 +228,21 @@ impl Player {
 
     fn samples_to_seconds(&self, samples: u32) -> f32 {
         samples as f32 / self.sample_rate.0 as f32
+    }
+
+    fn get_stream_config(&self) -> SupportedStreamConfig {
+        let mut supported_configs_range = self.device
+            .supported_output_configs()
+            .expect("error while querying configs");
+
+        supported_configs_range
+            .find(|range| {
+                range.sample_format() == cpal::SampleFormat::F32
+                    && range.max_sample_rate() >= self.sample_rate
+                    && range.min_sample_rate() <= self.sample_rate
+                    && range.channels() == self.channels
+            })
+            .expect("Could not find supported audio config")
+            .with_sample_rate(self.sample_rate)
     }
 }
