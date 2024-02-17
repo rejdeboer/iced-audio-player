@@ -1,14 +1,12 @@
 use apodize::hamming_iter;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{ChannelCount, Stream};
-use hound::{WavIntoSamples, WavReader};
+use hound::WavReader;
 use rtrb::{Consumer, RingBuffer};
 use rustfft::num_complex::Complex;
 use rustfft::{Fft, FftPlanner};
-use std::fs::File;
-use std::io::BufReader;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -35,8 +33,8 @@ pub struct Player {
     channels: ChannelCount,
     stream: Option<Stream>,
     is_playing: bool,
-    position: Arc<AtomicUsize>,
-    samples_amount: usize,
+    position: Arc<AtomicU32>,
+    duration: u32,
     fft: Arc<dyn Fft<f32>>,
     hamming_window: Vec<f32>,
     output_len: usize,
@@ -56,8 +54,8 @@ impl Player {
             channels: 2,
             stream: None,
             is_playing: false,
-            position: Arc::new(AtomicUsize::new(0)),
-            samples_amount: 0,
+            position: Arc::new(AtomicU32::new(0)),
+            duration: 0,
             fft: fft_planner.plan_fft_forward(BUFFER_SIZE),
             hamming_window,
             output_len: BUFFER_SIZE,
@@ -67,18 +65,24 @@ impl Player {
     }
 
     pub fn load_file(&mut self, path: PathBuf) {
-        let reader = WavReader::open(path).expect("Failed to open wav file");
+        let mut reader =
+            WavReader::open(path).expect("Failed to open wav file");
 
         let spec = reader.spec();
-        let samples: WavIntoSamples<BufReader<File>, i16> =
-            reader.into_samples();
 
         let (mut input_producer, mut input_consumer) =
             RingBuffer::new(BUFFER_SIZE * 3);
-        self.samples_amount = samples.len();
 
-        std::thread::spawn(move || {
-            for sample in samples {
+        self.position.store(0, Ordering::Relaxed);
+        self.duration = reader.duration();
+        let position = self.position.clone();
+        let channels = self.channels.clone();
+
+        std::thread::spawn(move || loop {
+            let pos = position.load(Ordering::Relaxed);
+
+            let mut samples_processed = 0;
+            for sample in reader.samples::<i16>().take(BUFFER_SIZE) {
                 while input_producer.is_full() {
                     std::thread::sleep(Duration::from_millis(100));
                 }
@@ -86,12 +90,23 @@ impl Player {
                 input_producer
                     .push(sample.expect("Failed to read sample"))
                     .expect("Failed to push sample");
+
+                samples_processed += 1;
             }
+
+            match position.compare_exchange(
+                pos,
+                pos + (samples_processed / channels) as u32,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => (),
+                Err(p) => reader.seek(p).expect("Failed to seek"),
+            };
         });
 
         self.sample_rate = cpal::SampleRate(spec.sample_rate);
         self.channels = spec.channels;
-        self.position.store(0, Ordering::Relaxed);
 
         let bin_size: f32 = self.sample_rate.0 as f32 / BUFFER_SIZE as f32 * 2.;
         self.output_len = (MAX_FREQUENCY / bin_size).ceil() as usize;
@@ -120,16 +135,13 @@ impl Player {
             RingBuffer::new(BUFFER_SIZE * 3);
         self.buffer_consumer = Some(output_consumer);
 
-        let position = self.position.clone();
-
         self.stream = Some(
             device
                 .build_output_stream(
                     &supported_config.into(),
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                        let mut pos = position.load(Ordering::Relaxed);
                         for sample in data.iter_mut() {
-                            let value = input_consumer.pop().unwrap();
+                            let value = input_consumer.pop().unwrap_or(0);
                             *sample = cpal::Sample::from_sample(value);
 
                             // If the buffer is full, we should do one of the following:
@@ -141,15 +153,7 @@ impl Player {
                             {
                                 eprintln!("Ring buffer is full");
                             }
-
-                            pos += 1;
                         }
-                        _ = position.compare_exchange(
-                            pos - data.len(),
-                            pos,
-                            Ordering::Relaxed,
-                            Ordering::Relaxed,
-                        );
                     },
                     move |_err| panic!("ERROR"),
                     None,
@@ -168,8 +172,7 @@ impl Player {
     }
 
     pub fn set_position(&mut self, seconds: f32) {
-        let new_position: usize =
-            self.seconds_to_samples(seconds).max(0) as usize;
+        let new_position = self.seconds_to_samples(seconds).max(0) as u32;
         self.position.store(new_position, Ordering::Relaxed);
     }
 
@@ -178,7 +181,7 @@ impl Player {
     }
 
     pub fn get_duration(&self) -> f32 {
-        self.samples_to_seconds(self.samples_amount)
+        self.samples_to_seconds(self.duration)
     }
 
     pub fn is_playing(&self) -> bool {
@@ -230,10 +233,10 @@ impl Player {
     }
 
     fn seconds_to_samples(&self, seconds: f32) -> i32 {
-        (self.sample_rate.0 as f32 * seconds) as i32 * self.channels as i32
+        (self.sample_rate.0 as f32 * seconds) as i32
     }
 
-    fn samples_to_seconds(&self, samples: usize) -> f32 {
-        samples as f32 / self.channels as f32 / self.sample_rate.0 as f32
+    fn samples_to_seconds(&self, samples: u32) -> f32 {
+        samples as f32 / self.sample_rate.0 as f32
     }
 }
