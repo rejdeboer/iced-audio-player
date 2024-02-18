@@ -2,7 +2,7 @@ use apodize::hamming_iter;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{ChannelCount, Device, Stream, SupportedStreamConfig};
 use hound::WavReader;
-use rtrb::{Consumer, RingBuffer};
+use rtrb::{Consumer, Producer, RingBuffer};
 use rustfft::num_complex::Complex;
 use rustfft::{Fft, FftPlanner};
 use std::path::PathBuf;
@@ -81,6 +81,8 @@ impl Player {
         let (mut input_producer, mut input_consumer) =
             RingBuffer::new(BUFFER_SIZE * 3);
 
+        self.sample_rate = cpal::SampleRate(spec.sample_rate);
+        self.channels = spec.channels;
         self.position.store(0, Ordering::Relaxed);
         self.duration = reader.duration();
         let position = self.position.clone();
@@ -113,9 +115,6 @@ impl Player {
             };
         });
 
-        self.sample_rate = cpal::SampleRate(spec.sample_rate);
-        self.channels = spec.channels;
-
         let bin_size: f32 = self.sample_rate.0 as f32 / BUFFER_SIZE as f32 * 2.;
         self.output_len = (MAX_FREQUENCY / bin_size).ceil() as usize;
 
@@ -129,21 +128,12 @@ impl Player {
             self.device
                 .build_output_stream(
                     &supported_config.into(),
-                    move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                        for sample in data.iter_mut() {
-                            let value = input_consumer.pop().unwrap_or(0);
-                            *sample = cpal::Sample::from_sample(value);
-
-                            // If the buffer is full, we should do one of the following:
-                            // - Increase BUFFER_SIZE
-                            // - Optimize UI thread
-                            // - Decrease spectrum resolution
-                            if let Some(_) =
-                                output_producer.push(value as f32).err()
-                            {
-                                eprintln!("Ring buffer is full");
-                            }
-                        }
+                    move |data, _| {
+                        process_samples(
+                            data,
+                            &mut input_consumer,
+                            &mut output_producer,
+                        )
                     },
                     move |_err| panic!("ERROR"),
                     None,
@@ -231,7 +221,8 @@ impl Player {
     }
 
     fn get_stream_config(&self) -> SupportedStreamConfig {
-        let mut supported_configs_range = self.device
+        let mut supported_configs_range = self
+            .device
             .supported_output_configs()
             .expect("error while querying configs");
 
@@ -244,5 +235,23 @@ impl Player {
             })
             .expect("Could not find supported audio config")
             .with_sample_rate(self.sample_rate)
+    }
+}
+fn process_samples(
+    samples: &mut [f32],
+    input_consumer: &mut Consumer<i16>,
+    output_producer: &mut Producer<f32>,
+) {
+    for sample in samples.iter_mut() {
+        let value = input_consumer.pop().unwrap_or(0);
+        *sample = cpal::Sample::from_sample(value);
+
+        // If the buffer is full, we should do one of the following:
+        // - Increase BUFFER_SIZE
+        // - Optimize UI thread
+        // - Decrease spectrum resolution
+        if let Some(_) = output_producer.push(value as f32).err() {
+            eprintln!("Output buffer is full");
+        }
     }
 }
