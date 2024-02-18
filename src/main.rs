@@ -8,6 +8,7 @@ use iced::{theme, window};
 use iced::{
     Alignment, Application, Command, Element, Length, Subscription, Theme,
 };
+use iced_audio_player::audio_processor::AudioProcessor;
 use iced_audio_player::icon::Icon;
 use iced_audio_player::message::Message;
 use iced_audio_player::player::Player;
@@ -25,6 +26,7 @@ struct AudioPlayer {
     last_updated: Instant,
     scene: Scene,
     player: Player,
+    processor: AudioProcessor,
     seek_bar_value: f32,
     seek_bar_dragging: bool,
     duration: f32,
@@ -42,6 +44,7 @@ impl Application for AudioPlayer {
                 last_updated: Instant::now(),
                 scene: Scene::new(),
                 player: Player::new(),
+                processor: AudioProcessor::new(),
                 seek_bar_value: 0f32,
                 seek_bar_dragging: false,
                 duration: 0f32,

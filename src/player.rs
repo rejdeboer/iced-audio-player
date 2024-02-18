@@ -1,3 +1,4 @@
+use crate::audio_processor::AudioProcessor;
 use apodize::hamming_iter;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{ChannelCount, Device, Stream, SupportedStreamConfig};
@@ -28,7 +29,7 @@ impl FftSpectrum {
     }
 }
 
-pub struct Player {
+pub struct Player<'a> {
     device: Device,
     sample_rate: cpal::SampleRate,
     channels: ChannelCount,
@@ -41,10 +42,11 @@ pub struct Player {
     output_len: usize,
     fft_output: FftSpectrum,
     buffer_consumer: Option<Consumer<f32>>,
+    audio_processor: &'a AudioProcessor,
 }
 
-impl Player {
-    pub fn new() -> Self {
+impl<'a> Player<'a> {
+    pub fn new(audio_processor: &'a AudioProcessor) -> Self {
         let mut fft_planner = FftPlanner::new();
         let hamming_window: Vec<f32> = hamming_iter(BUFFER_SIZE)
             .map(|f| f as f32)
@@ -69,6 +71,7 @@ impl Player {
             output_len: BUFFER_SIZE,
             fft_output: FftSpectrum::empty(),
             buffer_consumer: None,
+            audio_processor,
         }
     }
 
