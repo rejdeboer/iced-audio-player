@@ -253,11 +253,23 @@ fn process_samples(
     input_consumer: &mut Consumer<i16>,
     output_producer: &mut Producer<f32>,
 ) {
-    for sample in samples.iter_mut() {
-        let value = input_consumer.pop().unwrap_or(0);
-        *sample = cpal::Sample::from_sample(value);
+    let read_chunk = input_consumer
+        .read_chunk(std::cmp::min(samples.len(), input_consumer.slots()))
+        .unwrap();
 
-        // If the buffer is full, we should do one of the following:
+    let (first, second) = read_chunk.as_slices();
+    let mut input_samples = [first, second]
+        .concat()
+        .iter()
+        .map(|sample| *sample as f32)
+        .collect::<Vec<f32>>();
+    input_samples.resize(samples.len(), 0f32);
+    samples.copy_from_slice(input_samples.as_slice());
+    read_chunk.commit_all();
+
+    let write_slots = std::cmp::min(samples.len(), output_producer.slots());
+    if write_slots != samples.len() {
+        // How to fix?
         // - Increase BUFFER_SIZE
         // - Optimize UI thread
         // - Decrease spectrum resolution
@@ -265,4 +277,14 @@ fn process_samples(
             eprintln!("Output buffer is full");
         }
     }
+        eprintln!("Output is being processed too slow")
+    }
+
+    let mut write_chunk = output_producer.write_chunk(write_slots).unwrap();
+    let (first, second) = write_chunk.as_mut_slices();
+    let mid = first.len();
+
+    first.copy_from_slice(&samples[..mid]);
+    second.copy_from_slice(&samples[mid..]);
+    write_chunk.commit_all();
 }
