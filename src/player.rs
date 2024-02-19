@@ -273,10 +273,6 @@ fn process_samples(
         // - Increase BUFFER_SIZE
         // - Optimize UI thread
         // - Decrease spectrum resolution
-        if let Some(_) = output_producer.push(value as f32).err() {
-            eprintln!("Output buffer is full");
-        }
-    }
         eprintln!("Output is being processed too slow")
     }
 
