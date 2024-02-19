@@ -91,26 +91,37 @@ impl Player {
         std::thread::spawn(move || loop {
             let pos = position.load(Ordering::Relaxed);
 
-            let mut samples_processed = 0;
-            for sample in reader.samples::<i16>().take(BUFFER_SIZE) {
-                while input_producer.is_full() {
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-
-                input_producer
-                    .push(sample.expect("Failed to read sample"))
-                    .expect("Failed to push sample");
-
-                samples_processed += 1;
+            while input_producer.is_full() {
+                std::thread::sleep(Duration::from_millis(100));
             }
+
+            let mut chunk = input_producer
+                .write_chunk(std::cmp::min(input_producer.slots(), BUFFER_SIZE))
+                .unwrap();
+
+            let mut samples = reader
+                .samples::<i16>()
+                .take(chunk.len())
+                .map(|s| s.expect("Failed to read sample"))
+                .collect::<Vec<i16>>();
+            samples.resize(chunk.len(), 0);
+
+            let (first, second) = chunk.as_mut_slices();
+            let mid = first.len();
+
+            first.copy_from_slice(&samples[..mid]);
+            second.copy_from_slice(&samples[mid..]);
+
+            chunk.commit_all();
 
             match position.compare_exchange(
                 pos,
-                pos + (samples_processed / channels) as u32,
+                pos + (samples.len() as u16 / channels) as u32,
                 Ordering::Relaxed,
                 Ordering::Relaxed,
             ) {
                 Ok(_) => (),
+                // Position was changed from set_position
                 Err(p) => reader.seek(p).expect("Failed to seek"),
             };
         });
@@ -147,7 +158,6 @@ impl Player {
         if let Some(ref stream) = self.stream {
             stream.play().unwrap();
             self.is_playing = true;
-            return;
         }
     }
 
@@ -237,6 +247,7 @@ impl Player {
             .with_sample_rate(self.sample_rate)
     }
 }
+
 fn process_samples(
     samples: &mut [f32],
     input_consumer: &mut Consumer<i16>,
