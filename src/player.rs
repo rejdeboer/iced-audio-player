@@ -105,6 +105,11 @@ impl Player {
                 .map(|s| s.expect("Failed to read sample"))
                 .collect::<Vec<i16>>();
             samples.resize(chunk.len(), 0);
+                .map(|s| {
+                    cpal::Sample::from_sample(s.expect("Failed to read sample"))
+                })
+                .collect::<Vec<_>>();
+            samples.resize(chunk.len(), 0f32);
 
             let (first, second) = chunk.as_mut_slices();
             let mid = first.len();
@@ -250,7 +255,7 @@ impl Player {
 
 fn process_samples(
     samples: &mut [f32],
-    input_consumer: &mut Consumer<i16>,
+    input_consumer: &mut Consumer<f32>,
     output_producer: &mut Producer<f32>,
 ) {
     let read_chunk = input_consumer
@@ -261,8 +266,8 @@ fn process_samples(
     let mut input_samples = [first, second]
         .concat()
         .iter()
-        .map(|sample| *sample as f32)
-        .collect::<Vec<f32>>();
+        .map(|sample| *sample)
+        .collect::<Vec<_>>();
     input_samples.resize(samples.len(), 0f32);
     samples.copy_from_slice(input_samples.as_slice());
     read_chunk.commit_all();

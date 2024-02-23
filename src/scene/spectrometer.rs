@@ -70,7 +70,7 @@ impl Spectrometer {
         &self,
         vertices: &mut Vec<FrequencyVertex>,
     ) {
-        let max_vol = 7.5;
+        let max_vol = 2.5;
         let max_pos = match vertices.last() {
             Some(vertex) => vertex.position,
             None => 1f32,
